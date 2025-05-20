@@ -1,9 +1,3 @@
-using System;
-using System.Text.Json;
-using System.Diagnostics.CodeAnalysis;
-using Webserver;
-using System.ComponentModel;
-
 namespace Webserver
 {
     public class Request
@@ -36,26 +30,29 @@ namespace Webserver
             //Console.WriteLine("Substrings:");
             foreach (string substring in substrings)
             {
-                //Console.WriteLine(substring);
-                switch (substring.Substring(0, substring.IndexOf(" ")))
+                try
                 {
-                    case "Host:":
-                        header.host = substring.Substring(substring.IndexOf(" ") + 1);
-                        break;
-                    case "GET":
-                        header.method = "GET";
-                        string sub = substring.Substring(substring.IndexOf(" ") + 1);
-                        header.path = sub.Substring(0, sub.IndexOf(" "));
-                        header.protocol = sub.Substring(sub.IndexOf(" ") + 1);
-                        break;
-                    // todo: implements other methods, check examples
-                    case "Connection:":
-                        header.connection = substring.Substring(substring.IndexOf(" ") + 1);
-                        break;
-                    case "Cache-Control":
-                        header.cacheControl = int.Parse(substring.Substring(substring.IndexOf("max-age=") + 8));
-                        break;
+                    switch (substring.Substring(0, substring.IndexOf(" ")))
+                    {
+                        case "Host:":
+                            header.host = substring.Substring(substring.IndexOf(" ") + 1);
+                            break;
+                        case "GET":
+                            header.method = "GET";
+                            string sub = substring.Substring(substring.IndexOf(" ") + 1);
+                            header.path = sub.Substring(0, sub.IndexOf(" "));
+                            header.protocol = sub.Substring(sub.IndexOf(" ") + 1);
+                            break;
+                        // todo: implements other methods, check examples
+                        case "Connection:":
+                            header.connection = substring.Substring(substring.IndexOf(" ") + 1);
+                            break;
+                        case "Cache-Control":
+                            header.cacheControl = int.Parse(substring.Substring(substring.IndexOf("max-age=") + 8));
+                            break;
+                    }
                 }
+                catch {}
             }
             Console.WriteLine($"Requested File: {this.header.path}");
         }
@@ -70,14 +67,5 @@ namespace Webserver
         public string? protocol;
         public string? connection;
         public int? cacheControl;
-
-        // [MemberNotNull(nameof(host), nameof(method), nameof(path), nameof(protocol))]
-        // public void ValidateProperties()
-        // {
-        //     if (host == null || method == null || path == null || protocol == null)
-        //     {
-        //         throw new InvalidOperationException("All properties must be set before using the object.");
-        //     }
-        // }
     }
 }

@@ -14,10 +14,16 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Update="Config\localhost.json">
+        <None Update="Config\Websites\localhost.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="Config\blocked_ips.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="SSL\home.lokiscripts.com.pfx">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="SSL\ssl_config.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="Websites\localhost\index.html">

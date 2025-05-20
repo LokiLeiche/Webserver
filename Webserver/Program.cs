@@ -1,34 +1,49 @@
-﻿using System;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
-using System.IO;
 using System.Text;
-using System.Threading.Tasks;
-using Webserver;
 using System.Text.Json;
-using System.IO.Pipes;
-using System.Reflection.Metadata.Ecma335;
+
+// TODO LIST:
+// * Proper logs: Time, source ip, path, full request maybe even?
 
 namespace Webserver
 {
+    
     public class Webserver
     {
+        private static string GetSLLConf(string arg) {
+            try
+            {
+                string JsonString = File.ReadAllText("SSL/ssl_config.json");
+                JsonElement doc = JsonDocument.Parse(JsonString).RootElement;
+
+                string path = doc.GetProperty(arg).GetString() ?? "";
+                return path;
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+
         public static readonly List<Website> websites = [];
         public static readonly int httpPort = 80;
         public static readonly int httpsPort = 443;
-        private static readonly string certPath = "SSL/home.lokiscripts.com.pfx"; // path of your SLL cert file
-        private static readonly string certPw = "notgivingyoumypw"; // the password you entered when creating ts
+        private static readonly string certPath = GetSLLConf("cert_file"); // path of your SLL cert file
+        private static readonly string certPw = GetSLLConf("cert_pw"); // the password you entered when creating ts
         public static async Task Main(string[] args)
         {
+            _ = Filter.ClearRequests();
 
-            List<string> files = Directory.GetFiles("Config/").ToList();
+            List<string> files = Directory.GetFiles("Config/Websites/").ToList();
             foreach (string file in files)
             {
                 if (Path.GetExtension(file) != ".json") continue;
                 try
-                { 
+                {
                     string jsonString = File.ReadAllText(file);
                     JsonElement doc = JsonDocument.Parse(jsonString).RootElement;
 
@@ -46,21 +61,42 @@ namespace Webserver
                 }
             }
 
-            TcpListener httpListener = new(IPAddress.Any, httpPort);
+            _ = ListenHttp();
+            //_ = ListenHttps();
+
             TcpListener httpsListener = new(IPAddress.Any, httpsPort);
-            httpListener.Start();
-            Console.WriteLine($"Start listening on port {httpPort}");
             httpsListener.Start();
             Console.WriteLine($"Start listening on port {httpsPort}");
-
             while (true)
             {
-                // todo: jeweils in eigenen thread schieben
-
                 TcpClient httpsClient = await httpsListener.AcceptTcpClientAsync();
                 _ = ProcessClient(httpsClient, true);
-                // TcpClient httpClient = await httpListener.AcceptTcpClientAsync();
-                // _ = ProcessClient(httpClient, false);
+            }
+
+            
+        }
+
+        private static async Task ListenHttp()
+        {
+            TcpListener httpListener = new(IPAddress.Any, httpPort);
+            httpListener.Start();
+            Console.WriteLine($"Start listening on port {httpPort}");
+            while (true)
+            {
+                TcpClient httpClient = await httpListener.AcceptTcpClientAsync();
+                _ = ProcessClient(httpClient, false);
+            }
+        }
+
+        private static async Task ListenHttps()
+        {
+            TcpListener httpsListener = new(IPAddress.Any, httpsPort);
+            httpsListener.Start();
+            Console.WriteLine($"Start listening on port {httpsPort}");
+            while (true)
+            {
+                TcpClient httpsClient = await httpsListener.AcceptTcpClientAsync();
+                _ = ProcessClient(httpsClient, true);
             }
         }
 
@@ -72,28 +108,27 @@ namespace Webserver
 
             IPEndPoint? remoteEndpoint = client.Client.RemoteEndPoint as IPEndPoint;
 
-            if (remoteEndpoint != null)
-            {
-                Console.WriteLine($"{remoteEndpoint.Address.ToString()}:{remoteEndpoint.Port}");
-            }
-            
             if (ssl)
             {
                 sslStream = new(stream, false);
             }
-            
+
             try
             {
                 byte[] buffer = new byte[1024];
                 int bytesRead;
-                if (ssl && sslStream != null) {
+                if (ssl && sslStream != null)
+                {
                     await sslStream.AuthenticateAsServerAsync(new X509Certificate2(certPath, certPw));
                     bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
-                } else {
+                }
+                else
+                {
                     bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                 }
 
-                if (bytesRead < 0) {
+                if (bytesRead < 0)
+                {
                     Console.WriteLine("Closing connection because there was no content!");
 
                     byte[] resp = BuildResponse(400, Encoding.UTF8.GetBytes("Your request doesn't contain any readable content!"));
@@ -104,31 +139,24 @@ namespace Webserver
 
                     return; // todo: when could this happen, how to handle?
                 }
-                
+
 
                 Request request = new(Encoding.UTF8.GetString(buffer, 0, bytesRead));
 
-                if (request.header.method == null || request.header.host == null || request.header.path == null || request.header.protocol == null) {
-                    byte[] resp = BuildResponse(400, Encoding.UTF8.GetBytes("Your request is missing one of these header params: method, host, path, protocol!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
+                byte[]? filterResponse = Filter.CheckRequest(request, remoteEndpoint);
+                if (filterResponse != null)
+                {
+                    if (ssl && sslStream != null) await sslStream.WriteAsync(filterResponse, 0, filterResponse.Length);
+                    else await stream.WriteAsync(filterResponse, 0, filterResponse.Length);
                     client.Close();
 
                     return;
                 }
 
-                if (request.header.protocol != "HTTP/1.1") {
-                    byte[] resp = BuildResponse(502, Encoding.UTF8.GetBytes("Your request failed to use protocol HTTP/1.1!"));
 
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
-                }
-
-                if (request.header.method != "GET") {
+                // todo: support other methods, figure shit out how that works
+                if (request.header.method != "GET")
+                {
                     byte[] resp = BuildResponse(405, Encoding.UTF8.GetBytes("Only GET is supported for now!"));
 
                     if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
@@ -138,25 +166,18 @@ namespace Webserver
                     return;
                 }
 
-                if (request.header.path.Contains("..")) {
-                    byte[] resp = BuildResponse(403, Encoding.UTF8.GetBytes("No path with .. is allowed!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
-                }
-
                 Website? target = null;
-                foreach (Website site in websites) {
-                    if (site.domain == request.header.host && site.enabled) {
+                foreach (Website site in websites)
+                {
+                    if (site.domain == request.header.host && site.enabled)
+                    {
                         target = site;
                         break;
                     }
                 }
 
-                if (target == null) {
+                if (target == null)
+                {
                     byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("Host not found!"));
 
                     if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
@@ -166,7 +187,34 @@ namespace Webserver
                     return;
                 }
 
-                if (!File.Exists(target.directory + request.header.path)) {
+
+                if (Path.GetExtension(request.header.path) == string.Empty)
+                {
+                    string file_try = "index.html";
+                    while (!File.Exists(target.directory + request.header.path + file_try))
+                    {
+                        // make compiler shut up because request.header.path is checked for null in Filter.cs
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+                        Console.WriteLine(request.header.path[request.header.path.Length - 1]);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+                        if (request.header.path[request.header.path.Length - 1] != '/')
+                        {
+                            request.header.path += "/";
+                        }
+                        switch (file_try)
+                        {
+                            case "index.html":
+                                file_try = "index.php";
+                                break;
+
+                                // add other files maybe
+                        }
+                    }
+                    request.header.path += file_try;
+                }
+
+                if (!File.Exists(target.directory + request.header.path))
+                {
                     byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("File not found!"));
 
                     if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
@@ -174,19 +222,20 @@ namespace Webserver
                     client.Close();
 
                     return;
-                } else {
-                    // todo: testen ob das geht mit datei, config prüfen!
-                    string contentType = GetContentType(target.directory + request.header.path);
-
-                    byte[] file = File.ReadAllBytes(target.directory + request.header.path);
-                    byte[] resp = BuildResponse(200, file, $"Content-Type: {contentType}");
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
                 }
+
+
+                // actually serve the request
+                string contentType = GetContentType(target.directory + request.header.path);
+
+                byte[] file = File.ReadAllBytes(target.directory + request.header.path);
+                byte[] response = BuildResponse(200, file, $"Content-Type: {contentType}");
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(response, 0, response.Length);
+                else await stream.WriteAsync(response, 0, response.Length);
+                client.Close();
+
+                return;
             }
             catch (Exception ex)
             {
@@ -197,7 +246,7 @@ namespace Webserver
                 client.Close();
             }
         }
-        
+
 
         public static byte[] BuildResponse(int status, byte[] bodyBytes, string headerAdditions = "")
         {
