@@ -1,0 +1,1 @@
+# This file will only include suspisious and blocked requests, such as rate limited ones, blocked IPs, paths etc.

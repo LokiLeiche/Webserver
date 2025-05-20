@@ -106,7 +106,7 @@ namespace Webserver
             }
         }
 
-        private static int IsBlocked(string ip)
+        public static int IsBlocked(string ip)
         {
             if (timeouts.ContainsKey(ip))
             {

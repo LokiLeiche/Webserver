@@ -1,0 +1,1 @@
+# This file will include logs of normal served requests without the full header

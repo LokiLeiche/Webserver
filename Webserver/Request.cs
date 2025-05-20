@@ -3,9 +3,12 @@ namespace Webserver
     public class Request
     {
         public Header header;
+        public string time;
         public string? body;
         public Request(string request)
         {
+            time = DateTime.Now.ToString();
+
             string head;
             int headEndIdx = request.IndexOf("\r\n\r\n");
 
@@ -50,6 +53,7 @@ namespace Webserver
                         case "Cache-Control":
                             header.cacheControl = int.Parse(substring.Substring(substring.IndexOf("max-age=") + 8));
                             break;
+                        // todo: add other headers whenever I need them or they become important
                     }
                 }
                 catch {}

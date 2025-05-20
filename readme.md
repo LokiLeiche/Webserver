@@ -9,3 +9,6 @@ I don't know why you should since this software will probably never be used by p
 
 # How do I run this shit myself?
 Why do you want to do that? Compile shit from source yourself, if you don't know how to, you are probably also incapable of evaluate the security threats that come with this software and should not use it. It works on both windows and linux, but you need to run it as admin/sudo, otherwise your system will moan at you because you have no permission to bind to port 80/443. At least it did for me.
+
+
+don't bother about telling me how much this sucks, I know and I don't care lol

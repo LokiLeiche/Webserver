@@ -1,0 +1,1 @@
+# This log file will include ALL requests including denied ones with the FULL header

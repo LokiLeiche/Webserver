@@ -10,10 +10,11 @@ using System.Text.Json;
 
 namespace Webserver
 {
-    
+
     public class Webserver
     {
-        private static string GetSLLConf(string arg) {
+        private static string GetSLLConf(string arg)
+        {
             try
             {
                 string JsonString = File.ReadAllText("SSL/ssl_config.json");
@@ -73,7 +74,7 @@ namespace Webserver
                 _ = ProcessClient(httpsClient, true);
             }
 
-            
+
         }
 
         private static async Task ListenHttp()
@@ -143,99 +144,18 @@ namespace Webserver
 
                 Request request = new(Encoding.UTF8.GetString(buffer, 0, bytesRead));
 
-                byte[]? filterResponse = Filter.CheckRequest(request, remoteEndpoint);
-                if (filterResponse != null)
+                string? blockReason = await HandleRequest(request, ssl, remoteEndpoint, sslStream, stream, client);
+
+                if (blockReason == null)
                 {
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(filterResponse, 0, filterResponse.Length);
-                    else await stream.WriteAsync(filterResponse, 0, filterResponse.Length);
-                    client.Close();
-
-                    return;
+                    File.AppendAllText("logs/served.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path}");
                 }
-
-
-                // todo: support other methods, figure shit out how that works
-                if (request.header.method != "GET")
+                else
                 {
-                    byte[] resp = BuildResponse(405, Encoding.UTF8.GetBytes("Only GET is supported for now!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
+                    File.AppendAllText("logs/denied.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path} - Reason: {blockReason}");
                 }
-
-                Website? target = null;
-                foreach (Website site in websites)
-                {
-                    if (site.domain == request.header.host && site.enabled)
-                    {
-                        target = site;
-                        break;
-                    }
-                }
-
-                if (target == null)
-                {
-                    byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("Host not found!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
-                }
-
-
-                if (Path.GetExtension(request.header.path) == string.Empty)
-                {
-                    string file_try = "index.html";
-                    while (!File.Exists(target.directory + request.header.path + file_try))
-                    {
-                        // make compiler shut up because request.header.path is checked for null in Filter.cs
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
-                        Console.WriteLine(request.header.path[request.header.path.Length - 1]);
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
-                        if (request.header.path[request.header.path.Length - 1] != '/')
-                        {
-                            request.header.path += "/";
-                        }
-                        switch (file_try)
-                        {
-                            case "index.html":
-                                file_try = "index.php";
-                                break;
-
-                                // add other files maybe
-                        }
-                    }
-                    request.header.path += file_try;
-                }
-
-                if (!File.Exists(target.directory + request.header.path))
-                {
-                    byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("File not found!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return;
-                }
-
-
-                // actually serve the request
-                string contentType = GetContentType(target.directory + request.header.path);
-
-                byte[] file = File.ReadAllBytes(target.directory + request.header.path);
-                byte[] response = BuildResponse(200, file, $"Content-Type: {contentType}");
-
-                if (ssl && sslStream != null) await sslStream.WriteAsync(response, 0, response.Length);
-                else await stream.WriteAsync(response, 0, response.Length);
-                client.Close();
-
-                return;
+                File.AppendAllText("logs/requests_full.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path} - {JsonSerializer.Serialize(request.header.full)}");
+                Console.WriteLine("Request served and log saved");
             }
             catch (Exception ex)
             {
@@ -245,6 +165,111 @@ namespace Webserver
             {
                 client.Close();
             }
+        }
+
+        private static async Task<string?> HandleRequest(Request request, bool ssl, IPEndPoint? remoteEndpoint, SslStream? sslStream, NetworkStream stream, TcpClient client)
+        {
+            byte[]? filterResponse = Filter.CheckRequest(request, remoteEndpoint);
+            if (filterResponse != null)
+            {
+                if (ssl && sslStream != null) await sslStream.WriteAsync(filterResponse, 0, filterResponse.Length);
+                else await stream.WriteAsync(filterResponse, 0, filterResponse.Length);
+                client.Close();
+
+                string reason;
+                if (remoteEndpoint != null)
+                {
+                    int timeout = Filter.IsBlocked(remoteEndpoint.Address.ToString());
+                    if (timeout > 0) reason = $"Active timeout: {timeout}s";
+                    else reason = "Blocked by Filter.CheckRequest()";
+                } else reason = "Blocked by Filter.CheckRequest()";
+
+                return reason;
+            }
+
+
+            // todo: support other methods, figure shit out how that works
+            if (request.header.method != "GET")
+            {
+                byte[] resp = BuildResponse(405, Encoding.UTF8.GetBytes("Only GET is supported for now!"));
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
+                else await stream.WriteAsync(resp, 0, resp.Length);
+                client.Close();
+
+                return $"Wrong method: {request.header.method}";
+            }
+
+            Website? target = null;
+            foreach (Website site in websites)
+            {
+                if (site.domain == request.header.host && site.enabled)
+                {
+                    target = site;
+                    break;
+                }
+            }
+
+            if (target == null)
+            {
+                byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("Host not found!"));
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
+                else await stream.WriteAsync(resp, 0, resp.Length);
+                client.Close();
+
+                return $"Unknown or disabled host: {request.header.host}";
+            }
+
+
+            if (Path.GetExtension(request.header.path) == string.Empty)
+            {
+                string file_try = "index.html";
+                while (!File.Exists(target.directory + request.header.path + file_try))
+                {
+                    // make compiler shut up because request.header.path is checked for null in Filter.cs
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+                    Console.WriteLine(request.header.path[request.header.path.Length - 1]);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+                    if (request.header.path[request.header.path.Length - 1] != '/')
+                    {
+                        request.header.path += "/";
+                    }
+                    switch (file_try)
+                    {
+                        case "index.html":
+                            file_try = "index.php";
+                            break;
+
+                            // add other files maybe
+                    }
+                }
+                request.header.path += file_try;
+            }
+
+            if (!File.Exists(target.directory + request.header.path))
+            {
+                byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("File not found!"));
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
+                else await stream.WriteAsync(resp, 0, resp.Length);
+                client.Close();
+
+                return $"Requested file not found: {request.header.host}/{request.header.path}";
+            }
+
+
+            // actually serve the request
+            string contentType = GetContentType(target.directory + request.header.path);
+
+            byte[] file = File.ReadAllBytes(target.directory + request.header.path);
+            byte[] response = BuildResponse(200, file, $"Content-Type: {contentType}");
+
+            if (ssl && sslStream != null) await sslStream.WriteAsync(response, 0, response.Length);
+            else await stream.WriteAsync(response, 0, response.Length);
+            client.Close();
+
+            return null;
         }
 
 
