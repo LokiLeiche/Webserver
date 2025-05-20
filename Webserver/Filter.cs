@@ -35,11 +35,13 @@ namespace Webserver
             string? ip = endpoint?.Address.ToString();
             if (ip == null)
             {
+                Console.WriteLine("No IP readable");
                 return Webserver.BuildResponse(400, Encoding.UTF8.GetBytes("Unable to read client IP"));
             }
 
             if (blockedIps.Contains(ip))
             {
+                Console.WriteLine("IP blocked");
                 return Webserver.BuildResponse(403, []);
             }
 
@@ -62,28 +64,33 @@ namespace Webserver
             int blocked = IsBlocked(ip);
             if (blocked > 0)
             {
+                Console.WriteLine("timeouted");
                 return Webserver.BuildResponse(429, Encoding.UTF8.GetBytes($"You've been blocked from this server for another {blocked} seconds. This can happen due to rate limits or suspicious requests"));
             }
 
             if (request.header.method == null || request.header.host == null || request.header.path == null || request.header.protocol == null)
             {
+                Console.WriteLine("missing method, host, path or protocol");
                 return Webserver.BuildResponse(400, Encoding.UTF8.GetBytes("Your request is missing one of these header params: method, host, path, protocol!"));
             }
 
             if (request.header.protocol != "HTTP/1.1")
             {
+                Console.WriteLine("wrong http version");
                 return Webserver.BuildResponse(505, Encoding.UTF8.GetBytes("Your request failed to use protocol HTTP/1.1!"));
             }
 
             if (request.header.path.Contains(".env"))
             {
                 BlockIP(ip, 60 * 60 * 6);
+                Console.WriteLine("scraping .env");
                 return Webserver.BuildResponse(200, Encoding.UTF8.GetBytes("You fucking idiot do you really think I let you scrape my .env file? Jokes on you, chances are I don't even have one on this server. Eat this 200 response, I hope a human checked this and just wasted their time."));
             }
 
             if (request.header.path.Contains("..") || request.header.path.Contains("~/"))
             {
                 BlockIP(ip, 60 * 60);
+                Console.WriteLine("path contains cd commands");
                 return Webserver.BuildResponse(403, Encoding.UTF8.GetBytes("Suspicious path"));
             }
 

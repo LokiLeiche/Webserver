@@ -5,9 +5,6 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
-// TODO LIST:
-// * Proper logs: Time, source ip, path, full request maybe even?
-
 namespace Webserver
 {
 
@@ -120,8 +117,17 @@ namespace Webserver
                 int bytesRead;
                 if (ssl && sslStream != null)
                 {
-                    await sslStream.AuthenticateAsServerAsync(new X509Certificate2(certPath, certPw));
-                    bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                    try
+                    {
+                        await sslStream.AuthenticateAsServerAsync(new X509Certificate2(certPath, certPw));
+                        bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                    }
+                    catch
+                    {
+                        Console.WriteLine("SSL authentication failed, switching to http");
+                        bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                        ssl = false;
+                    }
                 }
                 else
                 {
@@ -225,7 +231,8 @@ namespace Webserver
             if (Path.GetExtension(request.header.path) == string.Empty)
             {
                 string file_try = "index.html";
-                while (!File.Exists(target.directory + request.header.path + file_try))
+                bool breakLoop = false;
+                while (!File.Exists(target.directory + request.header.path + file_try) && !breakLoop)
                 {
                     // make compiler shut up because request.header.path is checked for null in Filter.cs
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
@@ -241,7 +248,10 @@ namespace Webserver
                             file_try = "index.php";
                             break;
 
-                            // add other files maybe
+                        // add other files maybe
+                        case "index.php":
+                            breakLoop = true;
+                            break;
                     }
                 }
                 request.header.path += file_try;
