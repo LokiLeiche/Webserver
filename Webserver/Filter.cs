@@ -58,7 +58,7 @@ namespace Webserver
                 BlockIP(ip, 60 * 5);
             }
 
-            // todo: rework this and figure out how to keep track of time
+            // todo: rework this and figure out how to keep track of time // I'm now comming back to this and have no idea what the issue is, maybe I already done it lol
             int blocked = IsBlocked(ip);
             if (blocked > 0)
             {
