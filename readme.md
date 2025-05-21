@@ -1,3 +1,5 @@
+[![Build and Tests](https://github.com/LokiLeiche/Webserver/actions/workflows/dotnet.yml/badge.svg)](https://github.com/LokiLeiche/Webserver/actions/workflows/dotnet.yml)
+
 # What is this?
 I was bored and decided to write my own webserver in c#. Mainly to experiment and learn, since I have barely any experience with networking or C#. Therefore I'm doing things kinda just however I feel like and not how other popular webservers or some youtube tutorial tells me to. I just freestyle and see what happens.
 
