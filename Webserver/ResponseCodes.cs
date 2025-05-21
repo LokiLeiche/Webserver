@@ -1,6 +1,6 @@
 namespace Webserver
 {
-    internal class ResponseCodes // all common http status codes
+    public class ResponseCodes // all common http status codes
     {
         private static readonly Dictionary<int, string> Codes = new Dictionary<int, string>() // informational responses
         {

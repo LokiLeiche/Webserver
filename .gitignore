@@ -1,3 +1,5 @@
 Webserver/SSL/home.lokiscripts.com.pfx
 Webserver/obj/
 Webserver/bin/
+Webserver.Tests/bin/
+Webserver.Tests/obj/
