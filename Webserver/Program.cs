@@ -10,7 +10,7 @@ namespace Webserver
 
     public class Webserver
     {
-        private static string GetSLLConf(string arg)
+        public static string GetSLLConf(string arg)
         {
             try
             {
@@ -32,10 +32,9 @@ namespace Webserver
         public static readonly int httpsPort = 443;
         private static readonly string certPath = GetSLLConf("cert_file"); // path of your SLL cert file
         private static readonly string certPw = GetSLLConf("cert_pw"); // the password you entered when creating ts
-        public static async Task Main(string[] args)
-        {
-            _ = Filter.ClearRequests();
 
+        public static void LoadConfig()
+        {
             List<string> files = Directory.GetFiles("Config/Websites/").ToList();
             foreach (string file in files)
             {
@@ -48,8 +47,8 @@ namespace Webserver
                     bool enabled = doc.GetProperty("enabled").GetBoolean();
                     if (!enabled) continue;
 
-                    string? dir = doc.GetProperty("directory").GetString();
-                    string? domain = doc.GetProperty("domain").GetString();
+                    string dir = doc.GetProperty("directory").GetString() ?? "";
+                    string domain = doc.GetProperty("domain").GetString() ?? "";
 
                     websites.Add(new Website(enabled, domain, dir));
                 }
@@ -58,6 +57,12 @@ namespace Webserver
                     Console.WriteLine($"There has been an error trying to read the configuration from {file}: {ex.ToString()}\nIt will be skipped and not loaded.");
                 }
             }
+        }
+        public static async Task Main(string[] args)
+        {
+            _ = Filter.ClearRequests();
+
+            LoadConfig();
 
             _ = ListenHttp();
             //_ = ListenHttps();
@@ -70,8 +75,6 @@ namespace Webserver
                 TcpClient httpsClient = await httpsListener.AcceptTcpClientAsync();
                 _ = ProcessClient(httpsClient, true);
             }
-
-
         }
 
         private static async Task ListenHttp()
@@ -154,13 +157,13 @@ namespace Webserver
 
                 if (blockReason == null)
                 {
-                    File.AppendAllText("logs/served.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path}");
+                    File.AppendAllText("logs/served.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path}");
                 }
                 else
                 {
-                    File.AppendAllText("logs/denied.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path} - Reason: {blockReason}");
+                    File.AppendAllText("logs/denied.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - Reason: {blockReason}");
                 }
-                File.AppendAllText("logs/requests_full.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}/{request.header.path} - {JsonSerializer.Serialize(request.header.full)}");
+                File.AppendAllText("logs/requests_full.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - {JsonSerializer.Serialize(request.header.full)}");
                 Console.WriteLine("Request served and log saved");
             }
             catch (Exception ex)
@@ -303,7 +306,7 @@ namespace Webserver
             return responseStream.ToArray();
         }
 
-        private static string GetContentType(string file)
+        public static string GetContentType(string file)
         {
             string extension = Path.GetExtension(file);
             return extension switch
@@ -327,13 +330,8 @@ namespace Webserver
         public readonly string domain;
         public readonly string directory;
 
-        public Website(bool enabled, string? domain, string? dir)
+        public Website(bool enabled, string domain, string dir)
         {
-            if (String.IsNullOrEmpty(domain) || String.IsNullOrEmpty(dir))
-            {
-                throw new Exception("Unable to read all expected arguments from config file");
-            }
-
             this.enabled = enabled;
             this.domain = domain;
             this.directory = dir;

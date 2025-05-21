@@ -6,7 +6,7 @@ namespace Webserver
 {
     public class Filter
     {
-        private static List<string> LoadBlockedIPs()
+        public static List<string> LoadBlockedIPs()
         {
             string JsonString = File.ReadAllText("Config/blocked_ips.json");
             JsonElement doc = JsonDocument.Parse(JsonString).RootElement;
@@ -25,8 +25,8 @@ namespace Webserver
         {
             while (true)
             {
-                await Task.Delay(1000 * 60);
                 recentRequests = [];
+                await Task.Delay(1000 * 60);
             }
         }
 
@@ -55,12 +55,12 @@ namespace Webserver
                 recentRequests[ip] = 1;
             }
 
-            if (recentRequests[ip] > 30)
+            if (recentRequests[ip] > 90)
             {
                 BlockIP(ip, 60 * 5);
             }
 
-            // todo: rework this and figure out how to keep track of time // I'm now comming back to this and have no idea what the issue is, maybe I already done it lol
+            // todo: rework this and figure out how to keep track of time // I'm now comming back to this and have no idea what the issue is, maybe I already done it lol. Still have to actually test ts tho
             int blocked = IsBlocked(ip);
             if (blocked > 0)
             {
@@ -99,7 +99,7 @@ namespace Webserver
 
         private static void BlockIP(string ip, int time)
         {
-            if (timeouts[ip] < 1)
+            if (!timeouts.ContainsKey(ip))
             {
                 DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
                 DateTimeOffset unixEpoch = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -122,7 +122,7 @@ namespace Webserver
                 TimeSpan timeDifference = nowUtc - unixEpoch;
                 long unixTimestampSeconds = (long)timeDifference.TotalSeconds;
 
-                long delta = unixTimestampSeconds - timeouts[ip];
+                long delta = timeouts[ip] - unixTimestampSeconds;
                 if (delta > 0)
                 {
                     return (int)delta;
@@ -137,6 +137,12 @@ namespace Webserver
             {
                 return 0;
             }
+        }
+
+        public static void RemoveTimeout(string ip)
+        {
+            timeouts[ip] = 0;
+            recentRequests.Remove(ip);
         }
     }
 }

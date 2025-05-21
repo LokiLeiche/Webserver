@@ -15,22 +15,20 @@ namespace Webserver
             if (headEndIdx > 0 && headEndIdx < request.Length - 8)
             {
                 Console.WriteLine($"Head end index: {headEndIdx}");
-                this.body = request.Substring(headEndIdx + 8);
+                this.body = request.Substring(headEndIdx + 4);
                 head = request.Substring(0, headEndIdx);
             }
             else
             {
-                head = request;//.Substring(request.IndexOf("\r\n")); // why did I do this, does it serve any purpose?
+                int idx = request.IndexOf("\r\n\r\n");
+                if (idx > 0) head = request.Substring(0, idx);
+                else head = request;
             }
             this.header = new(head);
 
-            //Console.WriteLine($"Full header: {JsonSerializer.Serialize(head)}");
-
             string[] substrings = head.Split(["\r\n"], StringSplitOptions.RemoveEmptyEntries);
             substrings.Append(head.Substring(0, head.IndexOf("\r\n")));
-            //Console.WriteLine($"First argument: {head.Substring(0, head.IndexOf("\r\n"))} - {head.IndexOf("\r\n")}");
 
-            //Console.WriteLine("Substrings:");
             foreach (string substring in substrings)
             {
                 try
@@ -50,13 +48,13 @@ namespace Webserver
                         case "Connection:":
                             header.connection = substring.Substring(substring.IndexOf(" ") + 1);
                             break;
-                        case "Cache-Control":
+                        case "Cache-Control:":
                             header.cacheControl = int.Parse(substring.Substring(substring.IndexOf("max-age=") + 8));
                             break;
-                        // todo: add other headers whenever I need them or they become important
+                            // todo: add other headers whenever I need them or they become important
                     }
                 }
-                catch {}
+                catch { }
             }
             Console.WriteLine($"Requested File: {this.header.path}");
         }
@@ -67,7 +65,7 @@ namespace Webserver
         public string full = header;
         public string? host;
         public string? method;
-        public string? path { get; set; }
+        public string? path;
         public string? protocol;
         public string? connection;
         public int? cacheControl;

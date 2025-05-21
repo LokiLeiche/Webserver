@@ -1,0 +1,6 @@
+{
+    "note": "This is an example of a failed config for tests. Typo in domain and directory leading to not being able to read",
+    "enabled": true,
+    "domian": "home.lokiscripts.com",
+    "directry": "Websites/localhost/"
+}
