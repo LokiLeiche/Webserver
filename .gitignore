@@ -3,3 +3,4 @@ Webserver/obj/
 Webserver/bin/
 Webserver.Tests/bin/
 Webserver.Tests/obj/
+.vscode/

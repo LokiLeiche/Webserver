@@ -4,6 +4,8 @@ using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Webserver
 {
@@ -26,12 +28,14 @@ namespace Webserver
             }
         }
 
-
+        private static Dictionary<string, List<string>> logs = [];
         public static readonly List<Website> websites = [];
         public static readonly int httpPort = 80;
         public static readonly int httpsPort = 443;
         private static readonly string certPath = GetSLLConf("cert_file"); // path of your SLL cert file
         private static readonly string certPw = GetSLLConf("cert_pw"); // the password you entered when creating ts
+        private static Dictionary<string, byte[]> fileCache = [];
+        private static Dictionary<int, Stopwatch> timers = [];
 
         public static void LoadConfig()
         {
@@ -58,14 +62,43 @@ namespace Webserver
                 }
             }
         }
+        
+        public static async Task LogManager()
+        {
+            while (true)
+            {
+                Dictionary<string, List<string>> currLogs = logs;
+                logs = [];
+                logs.Add("logs/denied.txt", []);
+                logs.Add("logs/requests_full.txt", []);
+                logs.Add("logs/served.txt", []);
+
+                foreach (KeyValuePair<string, List<string>> file in currLogs)
+                {
+                    foreach (string log in file.Value)
+                    {
+                        File.AppendAllText(file.Key, log);
+                    }
+                }
+                await Task.Delay(1000 * 5);
+            }
+        }
+
         public static async Task Main(string[] args)
         {
+            logs.Add("logs/denied.txt", []);
+            logs.Add("logs/requests_full.txt", []);
+            logs.Add("logs/served.txt", []);
+
             _ = Filter.ClearRequests();
 
             LoadConfig();
 
+            _ = LogManager();
+
             _ = ListenHttp();
-            //_ = ListenHttps();
+
+            Links.Init();
 
             TcpListener httpsListener = new(IPAddress.Any, httpsPort);
             httpsListener.Start();
@@ -103,7 +136,7 @@ namespace Webserver
 
         static async Task ProcessClient(TcpClient client, bool ssl)
         {
-            Console.WriteLine("Request received!");
+            //Console.WriteLine("Connection opened!");
             NetworkStream stream = client.GetStream();
             SslStream? sslStream = null;
 
@@ -112,99 +145,145 @@ namespace Webserver
             if (ssl)
             {
                 sslStream = new(stream, false);
+                try
+                {
+                    await sslStream.AuthenticateAsServerAsync(new X509Certificate2(certPath, certPw));
+                }
+                catch
+                {
+                    Console.WriteLine("SSL auth failed!");
+                    client.Close();
+                    return;
+                }
             }
 
-            try
+
+
+            using (stream)
+            using (sslStream)
+            using (client)
             {
-                byte[] buffer = new byte[1024];
-                int bytesRead;
-                if (ssl && sslStream != null)
+                while (true)
                 {
+                    CancellationTokenSource cts = new(10000);
                     try
                     {
-                        await sslStream.AuthenticateAsServerAsync(new X509Certificate2(certPath, certPw));
-                        bytesRead = await sslStream.ReadAsync(buffer, 0, buffer.Length);
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        if (ssl && sslStream != null)
+                        {
+                            var readTask = sslStream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
+                            var timeoutTask = Task.Delay(Timeout.Infinite, cts.Token);
+                            Task completedTask = await Task.WhenAny(readTask, timeoutTask);
+                            if (completedTask == readTask)
+                            {
+                                bytesRead = await readTask;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Read operation timed out!");
+                                cts.Cancel();
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            var readTask = stream.ReadAsync(buffer, 0, buffer.Length, cts.Token);
+                            var timeoutTask = Task.Delay(Timeout.Infinite, cts.Token);
+                            Task completedTask = await Task.WhenAny(readTask, timeoutTask);
+                            if (completedTask == readTask)
+                            {
+                                bytesRead = await readTask;
+                            }
+                            else
+                            {
+                                Console.WriteLine("Read operation timed out!");
+                                cts.Cancel();
+                                break;
+                            }
+                        }
+                        float startTime = DateTime.Now.Millisecond * 1000 + DateTime.Now.Microsecond;
+
+                        if (bytesRead < 1) break;
+
+                        Request request = new(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+
+                        string? blockReason = null;
+                        try
+                        {
+                            blockReason = await HandleRequest(request, ssl, remoteEndpoint, sslStream, stream, client);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Internal server error: {ex}");
+                            byte[] resp = BuildResponse(500, []);
+
+                            if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                            else await stream.WriteAsync(resp);
+
+                            break;
+                        }
+
+                        if (blockReason == null)
+                        {
+                            logs["logs/served.txt"].Add($"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path}");
+                        }
+                        else
+                        {
+                            logs["logs/denied.txt"].Add($"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - Reason: {blockReason}");
+                            break;
+                        }
+                        logs["logs/requests_full.txt"].Add($"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - {JsonSerializer.Serialize(request.header.full)}");
+                        Console.WriteLine($"Request handled in {DateTime.Now.Millisecond * 1000 + DateTime.Now.Microsecond - startTime}hs!");
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        Console.WriteLine("SSL authentication failed, switching to http");
-                        bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                        ssl = false;
+                        Console.WriteLine(ex.ToString());
+                        break;
+                    }
+                    finally
+                    {
+                        cts?.Dispose();
                     }
                 }
-                else
-                {
-                    bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                }
-
-                if (bytesRead < 0)
-                {
-                    Console.WriteLine("Closing connection because there was no content!");
-
-                    byte[] resp = BuildResponse(400, Encoding.UTF8.GetBytes("Your request doesn't contain any readable content!"));
-
-                    if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                    else await stream.WriteAsync(resp, 0, resp.Length);
-                    client.Close();
-
-                    return; // todo: when could this happen, how to handle?
-                }
-
-
-                Request request = new(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-
-                string? blockReason = await HandleRequest(request, ssl, remoteEndpoint, sslStream, stream, client);
-
-                if (blockReason == null)
-                {
-                    File.AppendAllText("logs/served.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path}");
-                }
-                else
-                {
-                    File.AppendAllText("logs/denied.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - Reason: {blockReason}");
-                }
-                File.AppendAllText("logs/requests_full.txt", $"\n{request.time} - {remoteEndpoint?.Address.ToString()} - {request.header.host}{request.header.path} - {JsonSerializer.Serialize(request.header.full)}");
-                Console.WriteLine("Request served and log saved");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-            finally
-            {
-                client.Close();
-            }
+            client.Close();
+            //Console.WriteLine("Connection closed!");
         }
 
         private static async Task<string?> HandleRequest(Request request, bool ssl, IPEndPoint? remoteEndpoint, SslStream? sslStream, NetworkStream stream, TcpClient client)
         {
-            byte[]? filterResponse = Filter.CheckRequest(request, remoteEndpoint);
-            if (filterResponse != null)
+            Filter.Response filterResponse = Filter.CheckRequest(request, remoteEndpoint);
+            if (filterResponse.response != null)
             {
-                if (ssl && sslStream != null) await sslStream.WriteAsync(filterResponse, 0, filterResponse.Length);
-                else await stream.WriteAsync(filterResponse, 0, filterResponse.Length);
-                client.Close();
+                if (ssl && sslStream != null) await sslStream.WriteAsync(filterResponse.response);
+                else await stream.WriteAsync(filterResponse.response);
+                //client.Close();
 
-                string reason;
-                if (remoteEndpoint != null)
-                {
-                    int timeout = Filter.IsBlocked(remoteEndpoint.Address.ToString());
-                    if (timeout > 0) reason = $"Active timeout: {timeout}s";
-                    else reason = "Blocked by Filter.CheckRequest()";
-                } else reason = "Blocked by Filter.CheckRequest()";
-
-                return reason;
+                return filterResponse.reason;
             }
 
 
+            // temporary
+            if (request.header.path == "robots.txt" || request.header.path == "/robots.txt")
+            {
+                byte[] resp = BuildResponse(200, File.ReadAllBytes("Websites/localhost/robots.txt"));
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                else await stream.WriteAsync(resp);
+                //client.Close();
+
+                return null;
+            }
+
             // todo: support other methods, figure shit out how that works
-            if (request.header.method != "GET")
+            if (request.header.method != "GET" && request.header.method != "POST")
             {
                 byte[] resp = BuildResponse(405, Encoding.UTF8.GetBytes("Only GET is supported for now!"));
 
-                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                else await stream.WriteAsync(resp, 0, resp.Length);
-                client.Close();
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                else await stream.WriteAsync(resp);
+                //client.Close();
 
                 return $"Wrong method: {request.header.method}";
             }
@@ -223,11 +302,22 @@ namespace Webserver
             {
                 byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("Host not found!"));
 
-                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                else await stream.WriteAsync(resp, 0, resp.Length);
-                client.Close();
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                else await stream.WriteAsync(resp);
+                //client.Close();
 
                 return $"Unknown or disabled host: {request.header.host}";
+            }
+
+            if (target.domain == "links.lokiscripts.com" || target.domain == "link.lokiscripts.com")
+            {
+                byte[] resp = Links.RedirectToLink(request.header.path);
+
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                else await stream.WriteAsync(resp);
+                //client.Close();
+
+                return null;
             }
 
 
@@ -239,9 +329,9 @@ namespace Webserver
                 {
                     // make compiler shut up because request.header.path is checked for null in Filter.cs
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-                    Console.WriteLine(request.header.path[request.header.path.Length - 1]);
+                    Console.WriteLine(request.header.path[^1]);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-                    if (request.header.path[request.header.path.Length - 1] != '/')
+                    if (request.header.path[^1] != '/')
                     {
                         request.header.path += "/";
                     }
@@ -264,9 +354,9 @@ namespace Webserver
             {
                 byte[] resp = BuildResponse(404, Encoding.UTF8.GetBytes("File not found!"));
 
-                if (ssl && sslStream != null) await sslStream.WriteAsync(resp, 0, resp.Length);
-                else await stream.WriteAsync(resp, 0, resp.Length);
-                client.Close();
+                if (ssl && sslStream != null) await sslStream.WriteAsync(resp);
+                else await stream.WriteAsync(resp);
+                //client.Close();
 
                 return $"Requested file not found: {request.header.host}/{request.header.path}";
             }
@@ -275,12 +365,25 @@ namespace Webserver
             // actually serve the request
             string contentType = GetContentType(target.directory + request.header.path);
 
-            byte[] file = File.ReadAllBytes(target.directory + request.header.path);
+            byte[] file;
+
+            try
+            {
+                file = fileCache[target.domain + request.header.path];
+                Console.WriteLine("Serve file from cache");
+            }
+            catch
+            {
+                file = File.ReadAllBytes(target.directory + request.header.path);
+                fileCache.Add(target.domain + request.header.path, file);
+                Console.WriteLine("File was not cached");
+            }
+            
             byte[] response = BuildResponse(200, file, $"Content-Type: {contentType}");
 
-            if (ssl && sslStream != null) await sslStream.WriteAsync(response, 0, response.Length);
-            else await stream.WriteAsync(response, 0, response.Length);
-            client.Close();
+            if (ssl && sslStream != null) await sslStream.WriteAsync(response);
+            else await stream.WriteAsync(response);
+            //client.Close();
 
             return null;
         }
@@ -292,8 +395,9 @@ namespace Webserver
             header += status.ToString() + " ";
             header += ResponseCodes.GetMessage(status) + "\r\n";
             header += "Content-Length: " + bodyBytes.Length + "\r\n";
+            header += "Keep-Alive: timeout=10, max=100";
 
-            if (!String.IsNullOrEmpty(headerAdditions)) header += headerAdditions + "\r\n";
+            if (!string.IsNullOrEmpty(headerAdditions)) header += headerAdditions + "\r\n";
 
             header += "\r\n";
 
@@ -319,22 +423,16 @@ namespace Webserver
                 ".txt" => "text/plain",
                 ".ico" => "image/vnd.microsoft.icon",
                 ".gif" => "image/gif",
+                ".php" => "text/plain", // todo: temporary solution, implement php runtime
                 _ => "application/octet-stream",
             };
         }
     }
 
-    public class Website
+    public class Website(bool enabled, string domain, string dir)
     {
-        public readonly bool enabled;
-        public readonly string domain;
-        public readonly string directory;
-
-        public Website(bool enabled, string domain, string dir)
-        {
-            this.enabled = enabled;
-            this.domain = domain;
-            this.directory = dir;
-        }
+        public readonly bool enabled = enabled;
+        public readonly string domain = domain;
+        public readonly string directory = dir;
     }
 }

@@ -7,6 +7,7 @@ namespace Webserver
         public string? body;
         public Request(string request)
         {
+            Console.WriteLine("Request received!");
             time = DateTime.Now.ToString();
 
             string head;
@@ -27,7 +28,16 @@ namespace Webserver
             this.header = new(head);
 
             string[] substrings = head.Split(["\r\n"], StringSplitOptions.RemoveEmptyEntries);
-            substrings.Append(head.Substring(0, head.IndexOf("\r\n")));
+            try
+            {
+                int idx = head.IndexOf("\r\n");
+                if (idx > 0) substrings.Append(head.Substring(0, idx));
+                else substrings.Append(head);
+            }
+            catch
+            {
+                Console.WriteLine($"Appending first substring failed, full request: {this.header.full}");
+            }
 
             foreach (string substring in substrings)
             {
@@ -44,9 +54,16 @@ namespace Webserver
                             header.path = sub.Substring(0, sub.IndexOf(" "));
                             header.protocol = sub.Substring(sub.IndexOf(" ") + 1);
                             break;
+                        case "POST": // todo: how do post params/data work??
+                            header.method = "GET";
+                            sub = substring.Substring(substring.IndexOf(" ") + 1);
+                            header.path = sub.Substring(0, sub.IndexOf(" "));
+                            header.protocol = sub.Substring(sub.IndexOf(" ") + 1);
+                            break;
                         // todo: implements other methods, check examples
                         case "Connection:":
                             header.connection = substring.Substring(substring.IndexOf(" ") + 1);
+                            Console.WriteLine($"Connection: {header.connection}");
                             break;
                         case "Cache-Control:":
                             header.cacheControl = int.Parse(substring.Substring(substring.IndexOf("max-age=") + 8));
