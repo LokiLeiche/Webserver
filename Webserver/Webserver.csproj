@@ -11,10 +11,13 @@
     <None Update="Config/config.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Websites/example.com/logs/access.txt">
+    <None Update="Websites/example.com/logs/err.log">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Websites/example.com/logs/errors.txt">
+    <None Update="Websites/example.com/logs/full.log">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Websites/example.com/logs/request.log">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Websites/example.com/public/index.html">
