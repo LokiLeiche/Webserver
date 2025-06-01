@@ -1,0 +1,22 @@
+{
+    "cacheSize": 1073741824, // Size of pool for cached files in bytes
+    "blockedIps": ["0.0.0.0", "1.1.1.1"], // list of IPs that should not ever be served real content
+    "blockedPaths": [".env", "..", "~/", "cgi-bin/luci/"], // paths that can not be requested, for example private stuff that gets scraped a lot
+
+    "enableSsl": false, // use ssl or no? SSL cert required like shown below, remember to actually place the file there
+    "sslFile": "Config/lokiscripts.com.pfx", // the path to your ssl cert file (as .pfx!!!)
+    "sslPassword": "password", // the password you entered when creating the .pfx cert file
+
+    // ports, not recommended to change for webserver
+    "httpPort": 80,
+    "httpsPort": 443,
+
+    "websites": {
+        "example.com": {
+            "enabled": true,
+            "alias": ["www.example.com", "test.example.com"], // any additional domains that should be treated exactly like this one?
+            "public_directory": "Websites/example.com/public", // root of the website
+            "log_directory": "Websites/example.com/logs"
+        }
+    }
+}
