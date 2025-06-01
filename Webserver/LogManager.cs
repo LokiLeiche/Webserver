@@ -66,8 +66,7 @@ public static class LogManager
                     logText += log + "\n";
                 }
 
-                Console.WriteLine($"writing to log file: {logList.Key}/request.log");
-                File.AppendAllText(logList.Key + "/requests.log", logText);
+                File.AppendAllText(logList.Key + "/request.log", logText);
             }
 
             foreach (KeyValuePair<string, List<string>> logList in currFullLogs)

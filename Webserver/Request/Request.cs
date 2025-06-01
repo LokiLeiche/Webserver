@@ -76,7 +76,6 @@ public class Request
             }
             else header["path"] = requestParams[1];
 
-            header["path"] = requestParams[1].Substring(0, requestParams[1].IndexOf("?"));
             header["protocol"] = requestParams[2];
         }
         catch
