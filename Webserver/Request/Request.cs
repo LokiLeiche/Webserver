@@ -9,6 +9,7 @@ public class Request
     public readonly string? body;
     public readonly DateTime time = DateTime.Now;
     public readonly string full;
+    public readonly Dictionary<string, string> query = [];
 
     public Request(string request)
     {
@@ -57,7 +58,25 @@ public class Request
             string requestLine = head.Substring(0, head.IndexOf("\r\n"));
             string[] requestParams = requestLine.Split(" ", StringSplitOptions.None);
             header["method"] = requestParams[0];
-            header["path"] = requestParams[1];
+
+            int queryIdx = requestParams[1].IndexOf('?');
+            if (queryIdx > 0)
+            {
+                header["path"] = requestParams[1].Substring(0, requestParams[1].IndexOf('?'));
+                string query = requestParams[1].Substring(queryIdx + 1);
+                string[] arguments = query.Split(['&'], StringSplitOptions.None);
+                foreach (string arg in arguments)
+                {
+                    int seperatorIdx = arg.IndexOf('=');
+                    if (seperatorIdx < 1) throw new Exception();
+                    string key = arg.Substring(0, seperatorIdx);
+                    string value = arg.Substring(seperatorIdx + 1);
+                    this.query.Add(key, value);
+                }
+            }
+            else header["path"] = requestParams[1];
+
+            header["path"] = requestParams[1].Substring(0, requestParams[1].IndexOf("?"));
             header["protocol"] = requestParams[2];
         }
         catch
