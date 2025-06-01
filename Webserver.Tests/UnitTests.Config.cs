@@ -24,8 +24,8 @@ public class Config
     public void TestWebsiteLoading()
     { // have to compare each attribute individually cause array of a custom class
 
-        Website[] expected = [new("example.com", "Websites/example.com/public", "Websites/example.com/logs", ["www.example.com", "test.example.com"])];
-        Website[] actual = Webserver.Config.Websites;
+        Webserver.Config.Website[] expected = [new("example.com", "Websites/example.com/public", "Websites/example.com/logs", ["www.example.com", "test.example.com"])];
+        Webserver.Config.Website[] actual = Webserver.Config.Websites;
         
         Assert.Equal(expected.Length, actual.Length);
 
