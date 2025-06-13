@@ -72,8 +72,8 @@ public class ConnectionHandler(TcpClient client, bool ssl)
                 // actually handle the request
                 try
                 {
-                    Request.RequestHandler handler = new(Encoding.UTF8.GetString(buffer, 0, bytesRead), client.Client.RemoteEndPoint as IPEndPoint);
-                    Request.RequestHandler.Response response = handler.HandleRequest();
+                    Request.RequestHandler handler = new(Encoding.UTF8.GetString(buffer, 0, bytesRead), client.Client.RemoteEndPoint as IPEndPoint, client.Client.LocalEndPoint as IPEndPoint);
+                    Request.RequestHandler.Response response = await handler.HandleRequest();
                     await stream.WriteAsync(response.response);
                     string log = $"{handler.endpoint?.Address.ToString() ?? ""} - {handler.request.header["Host"]}{handler.request.header["path"]}";
                     log = response.served ? log + " - Served" : log + $" - Denied - Reason: {response.reason}";

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 using Webserver.Response;
 
 namespace Webserver.Request;
@@ -9,17 +11,18 @@ namespace Webserver.Request;
 /// </summary>
 /// <param name="rawRequest"></param>
 /// <param name="endPoint"></param>
-public class RequestHandler(string rawRequest, IPEndPoint? endPoint)
+public class RequestHandler(string rawRequest, IPEndPoint? endPoint, IPEndPoint? localEndPoint)
 {
     public readonly Request request = new(rawRequest);
     public readonly IPEndPoint? endpoint = endPoint;
+    public readonly IPEndPoint? localEndpoint = localEndPoint;
     public Config.Website? target = null;
 
     /// <summary>
     /// Processes a requests and returns a response
     /// </summary>
     /// <returns></returns>
-    public Response HandleRequest()
+    public async Task<Response> HandleRequest()
     {
         if (endpoint == null) return new(false, ResponseBuilder.BuildResponse(500, Encoding.UTF8.GetBytes("Unable to read IP")), "Unable to read IP"); // should not happen I think
         Filter.Response? filterResponse = Filter.CheckRequest(request, endpoint);
@@ -64,11 +67,22 @@ public class RequestHandler(string rawRequest, IPEndPoint? endPoint)
 
             if (!Cache.DoesFileExist(requestedFile)) return new(false, ResponseBuilder.BuildResponse(404, []), "File does not exist");
 
+            if (Path.GetExtension(requestedFile) == ".php") // use php-cgi to run PHP scripts, not performant for larger applications. Todo: consider and research FastCGI?
+            {
+                if (localEndpoint == null) return new(false, ResponseBuilder.BuildResponse(500, Encoding.UTF8.GetBytes("Unable to read local endpoint IP")), "Unable to read local endpoint IP"); // should not happen I think
+
+                PhpRequest phpRequest = new(request, target, requestedFile, localEndpoint, endpoint);
+                await phpRequest.ProcessRequest();
+
+                return new(true, ResponseBuilder.BuildResponse(200, Encoding.UTF8.GetBytes(phpRequest.ResponseBody), phpRequest.ResponseHeaders));
+            }
 
             return new(true, ResponseBuilder.BuildResponse(200, Cache.ReadFile(requestedFile), GetContentType(requestedFile)));
         }
         catch (Exception ex)
         {
+            Console.WriteLine(ex);
+
             LogManager.AddErrorLog(target.directory, $"Error trying to request {target.domain}{request.header["path"]}: {ex}");
             Console.WriteLine($"Error trying to serve request to {target.domain} - see {target.directory}/err.log for details");
             return new(false, ResponseBuilder.BuildResponse(500, []), "Internal server error, see err.log");

@@ -1,3 +1,4 @@
 * unit tests
-* PHP runtime
-* continue reading semantics: https://www.rfc-editor.org/rfc/rfc9110.html#name-identifiers-in-http - section 4.2.1
+* PHP usage instructions in readme and test on linux
+* continue reading semantics: https://www.rfc-editor.org/rfc/rfc9110.html#name-identifiers-in-http - section 4.3.2
+* fix/test file watcher cache reloading
