@@ -68,7 +68,7 @@ public class Request
             {
                 header["path"] = requestParams[1].Substring(0, requestParams[1].IndexOf('?'));
                 query_string = requestParams[1].Substring(queryIdx + 1);
-                string[] arguments = query_string.Split(['&'], StringSplitOptions.None);
+                string[] arguments = query_string.Split('&', StringSplitOptions.None);
                 foreach (string arg in arguments)
                 {
                     int seperatorIdx = arg.IndexOf('=');
