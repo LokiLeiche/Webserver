@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace Webserver;
 
-static class Programm
+static class Program
 {
     /// <summary>
     /// Main entry point for the programm

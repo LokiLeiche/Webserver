@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Webserver.Request;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace Webserver.Request;
 /// </summary>
 public static class Cache
 {
-    private static readonly Dictionary<string, byte[]> Files = [];
+    private static readonly ConcurrentDictionary<string, byte[]> Files = [];
     private static readonly FileSystemWatcher watcher; // this is used to minitor the Websites directory for changes and refresh cached files
 
     static Cache() // constructor to initialize watcher
@@ -55,7 +57,7 @@ public static class Cache
         {
             KeyValuePair<string, byte[]> entry = Files.First();
             currCacheSize -= (UInt64)entry.Value.Length;
-            Files.Remove(entry.Key);
+            Files.Remove(entry.Key, out byte[]? result);
         }
     }
 
@@ -72,28 +74,28 @@ public static class Cache
         {
             if (path.Replace(@"/", @"\") == e.FullPath)
             {
-                if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path);
+                if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path, out byte[]? result);
                 else Files[path] = File.ReadAllBytes(path);
                 return;
             }
         }
     }
 
-    internal static void OnFileRenamed(object sender, RenamedEventArgs  e)
+    internal static void OnFileRenamed(object sender, RenamedEventArgs e)
     {
         string oldPath = e.OldFullPath.Replace(@"\", @"/");
 
         if (Files.TryGetValue(oldPath, out byte[]? value))
         {
             Files[e.FullPath.Replace(@"\", @"/")] = value;
-            Files.Remove(oldPath);
+            Files.Remove(oldPath, out byte[]? result);
         }
 
         foreach (string path in Files.Keys)
         {
             if (path.Replace(@"/", @"\") == e.FullPath)
             {
-                if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path);
+                if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path, out byte[]? result);
                 else Files[path] = File.ReadAllBytes(path);
                 return;
             }

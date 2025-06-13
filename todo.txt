@@ -1,3 +1,4 @@
 * unit tests
 * PHP usage instructions in readme and test on linux
 * continue reading semantics: https://www.rfc-editor.org/rfc/rfc9110.html#name-identifiers-in-http - section 4.3.2
+* more code documentation
