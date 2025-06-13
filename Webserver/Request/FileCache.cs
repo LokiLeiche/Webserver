@@ -10,15 +10,15 @@ public static class Cache
 
     static Cache() // constructor to initialize watcher
     {
-        watcher = new("Websites")
-        {
-            Filter = "*.*",
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size
-        };
+        watcher = new();
+        watcher.Path = @"Websites";
+        watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size;
         watcher.Changed += OnFileChanged;
         watcher.Deleted += OnFileChanged;
+        watcher.Renamed += OnFileRenamed;
 
         watcher.EnableRaisingEvents = true;
+        watcher.IncludeSubdirectories = true;
     }
 
 
@@ -66,11 +66,32 @@ public static class Cache
     /// <param name="e"></param>
     internal static void OnFileChanged(object sender, FileSystemEventArgs e)
     {
-        List<string> keys = [];
+        if (Directory.Exists(e.FullPath)) return; // ignore directories
+
         foreach (string path in Files.Keys)
         {
-            string fullPath = Path.GetFullPath(path);
-            if (fullPath == e.FullPath)
+            if (path.Replace(@"/", @"\") == e.FullPath)
+            {
+                if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path);
+                else Files[path] = File.ReadAllBytes(path);
+                return;
+            }
+        }
+    }
+
+    internal static void OnFileRenamed(object sender, RenamedEventArgs  e)
+    {
+        string oldPath = e.OldFullPath.Replace(@"\", @"/");
+
+        if (Files.TryGetValue(oldPath, out byte[]? value))
+        {
+            Files[e.FullPath.Replace(@"\", @"/")] = value;
+            Files.Remove(oldPath);
+        }
+
+        foreach (string path in Files.Keys)
+        {
+            if (path.Replace(@"/", @"\") == e.FullPath)
             {
                 if (e.ChangeType == WatcherChangeTypes.Deleted) Files.Remove(path);
                 else Files[path] = File.ReadAllBytes(path);
