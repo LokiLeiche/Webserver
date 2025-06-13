@@ -45,7 +45,7 @@ public class RequestHandler(string rawRequest, IPEndPoint? endPoint, IPEndPoint?
             }
         }
 
-        // todo caching, alternative behaviour like link redirects
+        // todo: alternative behaviour like link redirects
         if (target == null) return new(false, ResponseBuilder.BuildResponse(404, []), $"No target found for host {request.header["Host"]}");
 
         try
@@ -67,7 +67,7 @@ public class RequestHandler(string rawRequest, IPEndPoint? endPoint, IPEndPoint?
 
             if (!Cache.DoesFileExist(requestedFile)) return new(false, ResponseBuilder.BuildResponse(404, []), "File does not exist");
 
-            if (Path.GetExtension(requestedFile) == ".php") // use php-cgi to run PHP scripts, not performant for larger applications. Todo: consider and research FastCGI?
+            if (Path.GetExtension(requestedFile) == ".php") // use php-cgi to run PHP scripts, not performant for larger applications with lots of traffic, maybe implement fastCGI at some point
             {
                 if (localEndpoint == null) return new(false, ResponseBuilder.BuildResponse(500, Encoding.UTF8.GetBytes("Unable to read local endpoint IP")), "Unable to read local endpoint IP"); // should not happen I think
 
@@ -107,7 +107,6 @@ public class RequestHandler(string rawRequest, IPEndPoint? endPoint, IPEndPoint?
             ".txt" => "text/plain",
             ".ico" => "image/vnd.microsoft.icon",
             ".gif" => "image/gif",
-            ".php" => "text/plain", // temporary solution, todo: implement php runtime
             _ => "application/octet-stream",
         };
 

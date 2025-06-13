@@ -18,6 +18,7 @@ public class Config
         Assert.Equal("password", Webserver.Config.SslPass);
         Assert.Equal(80, Webserver.Config.HttpPort);
         Assert.Equal(443, Webserver.Config.HttpsPort);
+        Assert.Equal([".env", "..", "~/", "cgi-bin/luci/"], Webserver.Config.BlockedPaths);
     }
 
     [Fact]

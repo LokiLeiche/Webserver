@@ -15,3 +15,44 @@ If you really want to contribute to this project and show me where I could impro
 
 # How to use
 You have to build this from source yourself, I will not be providing any prebuilt releases since I can not sign them and your OS will scream at you like this is malware. By building this yourself it also becomes your responsibility to check the source code for anything that could harm your system in any way and you acknowledge the risk that come with using this program. After building everything, edit the config.json to your needs and add your Websites files in the Websites directory. I recommend following the same pattern as provided with the example.com domain. Remember to remove or disbale the example.
+
+# Build instructions
+## Windows
+1. Install .NET 8.0 using Visual Studio: https://learn.microsoft.com/de-de/dotnet/core/install/windows#install-with-visual-studio
+2. Open a terminal (cmd/powershell)
+3. Clone the repo: `git clone https://github.com/LokiLeiche/Webserver`
+EITHER:
+4. Move into the new directory: `cd Webserver`
+5. Build the code: `dotnet build --configuration Release`
+OR:
+4. Open the solution in Visual Studio
+5. Build in Visual Studio
+
+The built files are now located under Webserver/bin/Release/net8.0/, from there you can run the Webserver.exe file.
+
+
+## Linux
+1. Install .NET 8.0 for your linux distribution, probably available from your package manager. As example for ubuntu: `sudo apt update && sudo apt install dotnet8`
+2. Clone the repo: `git clone https://github.com/LokiLeiche/Webserver`
+3. CD into new directory: `cd Webserver`
+4. Build the code: `dotnet build --configuration Release`
+The built files are now located under Webserver/bin/Release/net8.0/, from there you can run the file "Webserver". You can also move the files to any other directory wherever you want them to be.
+
+
+
+# PHP support
+This webserver supports PHP. As a little disclaimer tho, the implementation is not perfect yet. It works fine but it's not suitable for larger scale applications with lots of traffic since there's currently no FastCGI implementation. If you still wish to use PHP, follow these steps.
+
+## Windows
+1. Download your desired PHP version as .zip from https://windows.php.net/download
+2. Extract the contents into any directory that you can remember. For example C:\php\your_version\
+3. Type Environment into your search bar and it should show something like environment variables, click that. A new window will pop up.
+4. In that new window, press environment variables
+5. Under environment variables in the bottom half of the window search for PATH and double click it
+6. Create a new entry and paste the path where you just installed your PHP
+
+## Linux
+For linux you just need to download php-cgi, your distribution probably has a package for it to install via package manager. As example for ubuntu:
+1. sudo apt update
+2. sudo apt install php-cgi
+And that's it, you should now be able to run php files from linux.
